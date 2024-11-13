@@ -4,7 +4,9 @@ use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post};
 use axum::{Extension, Router};
 
+use futures::TryStreamExt;
 use sqlx::Row;
+use tokio::task::spawn_blocking;
 use tokio_util::io::ReaderStream;
 
 #[tokio::main]
@@ -13,6 +15,7 @@ async fn main() -> anyhow::Result<()> {
 
     let db_url = std::env::var("DATABASE_URL")?;
     let db_pool = sqlx::SqlitePool::connect(&db_url).await?;
+
     sqlx::migrate!("./migrations").run(&db_pool).await?;
 
     let app = Router::new()
@@ -78,6 +81,9 @@ async fn upload(
     if let (Some(tags), Some(img)) = (tags, img) {
         let new_image_id = insert_image(&db_pool, &tags).await.unwrap();
         save_image(new_image_id, &img).await.unwrap();
+        spawn_blocking(move || make_thumbnail(new_image_id).unwrap())
+            .await
+            .unwrap();
     } else {
         panic!("Missing fields")
     }
@@ -101,4 +107,33 @@ async fn get_image(Path(id): Path<i64>) -> impl IntoResponse {
         )
         .body(axum::body::Body::from_stream(ReaderStream::new(file)))
         .unwrap()
+}
+
+fn make_thumbnail(id: i64) -> anyhow::Result<()> {
+    let image_path = format!("images/{id}.jpg");
+    let images_bytes = std::fs::read(image_path)?;
+    let image = if let Ok(format) = image::guess_format(&images_bytes) {
+        image::load_from_memory_with_format(&images_bytes, format)?
+    } else {
+        image::load_from_memory(&images_bytes)?
+    };
+
+    let thumbnail_path = format!("images/{id}_thumbnail.jpg");
+    let thumbnail = image.thumbnail(100, 100);
+    thumbnail.save(thumbnail_path)?;
+    Ok(())
+}
+
+async fn fill_missing_thumbnail(db_bool: &sqlx::SqlitePool) -> anyhow::Result<()> {
+    let mut rows = sqlx::query("SELECT id FROM images").fetch(db_bool);
+
+    while let Some(row) = rows.try_next().await? {
+        let id = row.get::<i64, _>(0);
+        let thumbnail_path = format!("images/{id}_thumb.jpg");
+        if !std::path::Path::new(&thumbnail_path).exists() {
+            spawn_blocking(move || make_thumbnail(id)).await??;
+        }
+    }
+
+    Ok(())
 }
