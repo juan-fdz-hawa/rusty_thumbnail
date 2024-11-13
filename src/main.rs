@@ -1,9 +1,11 @@
-use axum::extract::Multipart;
-use axum::response::Html;
+use axum::extract::{Multipart, Path};
+use axum::http::header;
+use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post};
 use axum::{Extension, Router};
 
 use sqlx::Row;
+use tokio_util::io::ReaderStream;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -15,6 +17,7 @@ async fn main() -> anyhow::Result<()> {
 
     let app = Router::new()
         .route("/", get(home))
+        .route("/:id", get(get_image))
         .route("/upload", post(upload))
         .layer(Extension(db_pool));
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
@@ -81,12 +84,21 @@ async fn upload(
     "Ok".to_string()
 }
 
-// async fn test(Extension(db_bool): Extension<sqlx::SqlitePool>) -> String {
-//     let result = sqlx::query("SELECT COUNT(id) FROM images")
-//         .fetch_one(&db_bool)
-//         .await
-//         .unwrap();
+async fn get_image(Path(id): Path<i64>) -> impl IntoResponse {
+    let filename = format!("images/{id}.jpg");
+    let attachment = format!("filename={filename}");
 
-//     let count = result.get::<i64, _>(0);
-//     format!("Count {count}")
-// }
+    let file = tokio::fs::File::open(&filename).await.unwrap();
+
+    axum::response::Response::builder()
+        .header(
+            header::CONTENT_TYPE,
+            header::HeaderValue::from_static("image/jpeg"),
+        )
+        .header(
+            header::CONTENT_DISPOSITION,
+            header::HeaderValue::from_str(&attachment).unwrap(),
+        )
+        .body(axum::body::Body::from_stream(ReaderStream::new(file)))
+        .unwrap()
+}
