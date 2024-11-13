@@ -1,6 +1,6 @@
-use axum::{routing::get, Extension, Router};
+use axum::{response::Html, routing::get, Extension, Router};
 
-use sqlx::Row;
+// use sqlx::Row;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -11,7 +11,7 @@ async fn main() -> anyhow::Result<()> {
     sqlx::migrate!("./migrations").run(&db_pool).await?;
 
     let app = Router::new()
-        .route("/", get(test))
+        .route("/", get(home))
         .layer(Extension(db_pool));
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
 
@@ -20,12 +20,18 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn test(Extension(db_bool): Extension<sqlx::SqlitePool>) -> String {
-    let result = sqlx::query("SELECT COUNT(id) FROM images")
-        .fetch_one(&db_bool)
-        .await
-        .unwrap();
-
-    let count = result.get::<i64, _>(0);
-    format!("Count {count}")
+async fn home() -> Html<String> {
+    let path = std::path::Path::new("src/index.html");
+    let contents = tokio::fs::read_to_string(path).await.unwrap();
+    Html(contents)
 }
+
+// async fn test(Extension(db_bool): Extension<sqlx::SqlitePool>) -> String {
+//     let result = sqlx::query("SELECT COUNT(id) FROM images")
+//         .fetch_one(&db_bool)
+//         .await
+//         .unwrap();
+
+//     let count = result.get::<i64, _>(0);
+//     format!("Count {count}")
+// }

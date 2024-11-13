@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thumbnail Server</title>
+</head>
+<body>
+    <h1>Welcome</h1>
+    <div id="thumbnails"></div>
+    <hr/>
+
+    <h2>Add an Image</h2>
+    <form action="/upload" method="post" enctype="multipart/form-data">
+        <input type="text" name="tags" id="tags" placeholder="Tags" />
+        <input type="file" name="image" id="image" />
+        <input type="submit" value="Upload New Image" />
+    </form>
+</body>
+</html>
